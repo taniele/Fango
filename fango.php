@@ -582,7 +582,7 @@ class FangoModel {
 	/**
 	 * @var array
 	 */
-	public $events = array('beforeUpdate','beforeInsert','afterUpdate','afterInsert');
+	public $events = array('beforeUpdate','beforeInsert','beforeDelete','afterUpdate','afterInsert','afterDelete');
 
 	/**
 	 * @param string $name
