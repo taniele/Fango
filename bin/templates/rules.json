@@ -1,0 +1,5 @@
+[
+	"(\\w+)/(\\w+)/(.*)$ controller=$1,action=$2,params=$3",
+	"(\\w+)/(\\w+)/?$ controller=$1,action=$2",
+	"(\\w+)/?$ controller=$1"
+]

@@ -1,0 +1,191 @@
+#!/usr/bin/php -q
+<?php
+$className = "Boots";
+define("__DIRNAME__", dirname(__FILE__));
+define("__CURDIR__", getcwd());
+
+if ($_SERVER["argc"] <= 1) {
+	Boots::help();
+}
+else {
+	if(method_exists($className, $_SERVER["argv"][1]) && is_callable($className . '::' . $_SERVER["argv"][1])) {
+		call_user_func($className . '::' . $_SERVER["argv"][1]);
+	}
+	else {
+		Boots::help();
+	}
+}
+
+class Boots {
+
+	static private function println($what = "") {
+		echo $what . PHP_EOL;
+	}
+	
+	static private function createController($controllers, $appPath) {
+
+		foreach($controllers as $name) {
+			$a = array();
+			preg_match("/^[A-Z]/", $name);
+			$controllerName = empty($a) ? ucwords($name) : $name;
+			
+			$controller = file_get_contents(__DIRNAME__ . "/templates/controller.php");
+			$controller = str_replace("{{NAME}}", $controllerName, $controller);
+			file_put_contents($appPath . "/application/controllers/" . $controllerName . ".php", $controller);
+			
+		}
+		
+	}
+
+	static private function createView($views, $appPath) {
+
+		foreach($views as $name) {
+			$a = array();
+			preg_match("/^[A-Z]/", $name);
+			$viewName = empty($a) ? ucwords($name) : $name;
+			
+			$view = file_get_contents(__DIRNAME__ . "/templates/view.phtml");
+			$view = str_replace("{{NAME}}", $viewName, $view);
+			file_put_contents($appPath . "/application/templates/" . $viewName . ".phtml", $view);			
+		}
+	}
+
+	static function help() {
+		Boots::println("It's easy.");
+		Boots::println("create app|application <name>");
+		Boots::println("\tCreates (scaffolds) an application with the specified name.");
+		Boots::println();
+		Boots::println("create controller|controllers <name> [name, name, ...]");
+		Boots::println("\tCreates one or more controllers.");
+		Boots::println();
+		Boots::println("create view|views <name> [name, name, ...]");
+		Boots::println("\tCreates one or more views.");
+		Boots::println();
+		Boots::println("help");
+		Boots::println("\tShows this text.");
+	}
+	
+	static private function copy($from, $to) {
+		if(!is_dir($from)) {
+			return copy($from, $to);
+		}
+		
+		$d = dir($from);
+		
+		while (false !== ($entry = $d->read())) {
+
+			if($entry != "." && $entry != "..") {
+				if(is_dir($entry)) {
+
+					Boots::copy($from . '/' . $entry, $to);
+				}
+				else {
+					copy($from . '/' . $entry, $to . '/' . $entry);
+				}
+			}
+		}
+	}
+	
+	static private function findPath() {
+		
+		$i = 0;
+		$path = 'fango/fango.php';
+
+		while((file_exists($path) == false) && $i < 3) {
+			$path = "../" . $path;
+			$i++;
+		}
+		
+		$pathName = dirname(realpath($path));
+		if(!$pathName) return null;
+		
+		$pathName = str_replace(array("\fango", "/fango"), "", $pathName);
+
+		return $pathName;
+	}
+	
+	static function create() {
+		switch($_SERVER["argv"][2]) {
+			case 'app':
+			case 'application':
+				
+				if(!isset($_SERVER["argv"][3])) {
+					return Boots::println("Retry typing the name of your application.");
+				}
+				
+				$appName = $_SERVER["argv"][3];
+				$appPath = getcwd() . '/' . $appName;
+				// create dir
+				if(file_exists($appPath)) {
+					return Boots::println("{$appName} already exists, cannot proceed.");
+				}
+
+				mkdir($appPath);
+
+				// create structure
+				mkdir($appPath . "/public");				
+				mkdir($appPath . "/application");	
+				mkdir($appPath . "/application/controllers");
+				mkdir($appPath . "/application/plugins");
+				mkdir($appPath . "/application/templates");
+				mkdir($appPath . "/fango");
+				mkdir($appPath . "/conf");
+				
+				copy(__DIRNAME__ . '/templates/public/index.php', $appPath . "/public/index.php");
+				copy(__DIRNAME__ . '/templates/public/htaccess', $appPath . "/public/.htaccess");
+
+				// put default controller				
+				Boots::createController(array('default'), $appPath);
+				
+				// put default view
+				Boots::createView(array('default'), $appPath);
+				
+				// put fango
+				Boots::copy(__DIRNAME__ . '/../fango', $appPath . "/fango");
+				
+				// put default plugins
+				Boots::copy(__DIRNAME__ . '/../fango', $appPath . "/application/plugins");
+				
+				// put configuration
+				Boots::copy(__DIRNAME__ . '/templates/configuration.json', $appPath . "/conf/default");
+				Boots::copy(__DIRNAME__ . '/templates/rules.json', $appPath . "/conf/rules");
+				
+				Boots::println("{$appName} created.");
+
+			break;
+			case 'controller':
+			case 'controllers':
+				
+				$appPath = Boots::findPath();
+
+				if(!$appPath) {
+					return Boots::println("Not a valid application.");
+				}
+			
+				if(!isset($_SERVER["argv"][3])) {
+					return Boots::println("Retry typing one or more names.");
+				}
+				
+				Boots::createController(array_slice($_SERVER["argv"], 3), $appPath);
+
+			break;
+			case 'view':
+			case 'views':
+				$appPath = Boots::findPath();
+
+				if(!$appPath) {
+					return Boots::println("Not a valid application.");
+				}
+
+				if(!isset($_SERVER["argv"][3])) {
+					return Boots::println("Retry typing one or more names.");
+				}
+			
+				Boots::createView(array_slice($_SERVER["argv"], 3), $appPath);
+			break;
+			default:
+				Boots::println("No. You have to specify either 'app' or 'application', 'controller(s)', 'view(s)'.");
+			break;
+		}
+	}
+}
