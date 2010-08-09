@@ -1,23 +1,57 @@
 <?php
 /**
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU Lesser General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU Lesser General Public License for more details.
-*
-* You should have received a copy of the GNU Lesser General Public License
-* along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*
-* @author Andrea Giardina <andrea.giardina@crealabs.it>
-* @link http://github.com/agiardina/Fango
-*/
-class Fango {
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * @author Andrea Giardina <andrea.giardina@crealabs.it>
+ * @link http://github.com/agiardina/Fango
+ */
+
+/**
+ * The main class 
+ */
+class FangoBase {
+
+	/**
+	 * The array of events, used by FangoEvent::lazyLoading to load
+	 * an event on demand
+	 */
+	public $events = array();
 	
+	function subscribe($event,$handler=null) {
+		$event->addObserver($this,$handler);
+		return $this;
+	}
+
+	function unsubscribe($event) {
+		$event->deleteObserver($this);
+		return $this;
+	}
+
+	/**
+	 * Used to lazy loading events
+	 */
+	function __get($name) {
+		FangoEvent::lazyLoading($this,$name);
+		return $this->$name;
+	}
+}
+
+/**
+ * The main controller
+ */
+class Fango extends FangoBase {
+
 	/**
 	 * @var string the default controller if no controller specified
 	 */
@@ -47,19 +81,19 @@ class Fango {
 	 * @var array the params
 	 */
 	public $params = array();
-	
+
 	/**
 	 * @var FangoDB
 	 */
 	public $db;
 
 	/**
-	 * @var FangoEvent 
+	 * @var FangoEvent
 	 */
-	static $onLoad;
+	static $onNew;
 
 	/**
-	 * @var FangoEvent 
+	 * @var FangoEvent
 	 */
 	public $beforeDispatch;
 
@@ -69,29 +103,19 @@ class Fango {
 	public $afterDispatch;
 
 
-	/**
-	 * @param FangoDB $db
-	 */
-	function  __construct($db = null) {
-		$this->db = $db;
-
+	function  __construct() {
 		$this->beforeDispatch = new FangoEvent('beforeDispatch');
 		$this->afterDispatch = new FangoEvent('afterDispatch');
-		
-		self::$onLoad->fire($this);
-	}
 
-	/**
-	 * Extend this method to run a code every time a controller is created
-	 */
-	function init() {}
+		self::$onNew->fire($this);
+	}
 
 	/**
 	 * @param array $custom_rules
 	 * @param  $subject
 	 * @return Fango
 	 */
-	function route($custom_rules = array(),$subject = ''){
+	function route($custom_rules = array(),$subject = '') {
 
 		//If subject has not been declared we guess that from $_SERVER
 		if (!$subject) {
@@ -116,11 +140,11 @@ class Fango {
 			if (!is_array($custom_rules)) $custom_rules = array($custom_rules);
 			$rules = array_merge($custom_rules,$rules);
 		}
-		
+
 		$controller = $this->default_controller;
 		$action = $this->default_action;
 		$params = array();
-		
+
 		foreach ($rules as $rule) {
 			list($rule,$replacement) = @preg_split("/[\t\s]/",$rule,-1,PREG_SPLIT_NO_EMPTY); //Split the rule from the replace
 
@@ -155,15 +179,20 @@ class Fango {
 		$this->action = $action;
 		$this->params = $params;
 
+		if (isset($_REQUEST)) {
+			$this->params = array_merge($_REQUEST,$this->params);
+
+		}
+
 		return $this;
 	}
-	
+
 	/**
 	 * @param string $controller
 	 * @param string $action
-	 * @param array $params 
+	 * @param array $params
 	 */
-	function dispatch($controller=null,$action=null,array $params=null){
+	function dispatch($controller=null,$action=null,array $params=null) {
 		if ($controller)$this->controller = $controller;
 		if ($action) $this->action = $action;
 		if ($params!==null) $this->params = $params;
@@ -181,12 +210,12 @@ class Fango {
 			$class_name = "{$this->controller}Controller";
 			$method_name = "{$this->action}Action";
 		}
-		
+
 		$obj_controller = new $class_name($this);
 		$obj_controller->init();
-		$obj_controller->$method_name();
-		
-		$this->afterDispatch->fire($this); //AfterDispatch Event Fired
+		$result = $obj_controller->$method_name();
+
+		$this->afterDispatch->fire($this,$result); //AfterDispatch Event Fired
 	}
 
 	/**
@@ -194,73 +223,100 @@ class Fango {
 	 * @param array $custom_rules
 	 * @param string $subject
 	 */
-	function run($custom_rules = array(),$subject = ''){
+	function run($custom_rules = array(),$subject = '') {
 		return $this->route($custom_rules,$subject)->dispatch();
+	}
+	
+	/**
+	 * Return the params array (URL Params + $_REQUEST)
+	 * @param array $params
+	 * @return array 
+	 */
+	function params(array $params=null) {
+		if ($params !== null) {
+			$this->params = $params;
+		}
+		return $this->params;
 	}
 
 	/**
-	 * @param string $name of the request param
-	 * @param mixed $default value 
+	 * Setter/Getter for param 
+	 * @param string $param
+	 * @param mixed $value
+	 * @return mixed 
 	 */
-	static function request($name,$default_value=null) {
-		if (!isset($_REQUEST[$name])) {
-			$_REQUEST[$name] = $default_value;
+	function param($param,$value=null) {
+		
+		if ($value!==null) {
+			$this->params[$param] = $value;
 		}
-		return $_REQUEST[$name];
+		
+		if (isset($this->params[$param])) {
+ 			return $this->params[$param];
+		}
+		return null;
+	}
+
+	/** Setter/Getter for request, use param instead
+	 * @param string $name of the request param
+	 * @param mixed  value
+	 * @see param
+	 * @deprecated
+	 */
+	function request($name,$value=null) {
+		return $this->param($name,$value);
 	}
 
 }
 
-class FangoController {
+class FangoController extends FangoBase {
 	/**
 	 * @var Fango The fango front controller
 	 */
 	public $fango;
 
 	/**
-	 * @var FangoEvent 
+	 * @var FangoEvent
 	 */
-	static $onLoad;
-
+	static $onNew;
 
 	/**
-	 * @param Fango $fango 
+	 * @param Fango $fango
 	 */
 	function __construct(Fango $fango) {
 		$this->fango = $fango;
-		self::$onLoad->fire($this);
+		self::$onNew->fire($this);
 	}
-	
+
 	/**
-	 * setter/getter for params
-	 * 
+	 * Extend this method to run a code every time a controller is created
+	 */
+	function init() {}
+
+
+	/**
+	 * shortcut for Fango::params()
+	 *
+	 * @see Fango::params()
+	 * @param array $params
+	 * @return array
+	 */
+	function params(array $params=null) {
+		return $this->fango->params($params);
+	}
+	/**
+	 * shortcut for Fango::param()
+	 *
+	 * @see Fango::param()
 	 * @param string $param
 	 * @param mixed $value
 	 * @return mixed
 	 */
-	function param($param,$value=null){
-		if ($value!==null) {
-			$this->fango->params[$param] = $value;
-		}
-		if (isset($this->fango->params[$param])) {
-			return $this->fango->params[$param];
-		}
-
-		return null;
+	function param($param,$value=null) {
+		return $this->fango->param($param,$value);
 	}
 
-	/**
-	 *
-	 * @param string $name of the table
-	 * @param string $pk name 
-	 * @return FangoModel
-	 */
-	function model($name,$pk = null) {
-		if (isset($this->fango->db)) {
-			return $this->fango->db->model($table,$pk);
-		}
-	}
-	
+
 	function error404Action() {
 		header("HTTP/1.0 404 Not Found");
 		echo "<h1>Page Not Found</h1>";
@@ -268,7 +324,13 @@ class FangoController {
 
 }
 
-class FangoView {
+/**
+ * @method string getName() getName() return the name of the view
+ * @method string getTemplate() getTemplate() return the template path
+ * @method FangoView name() $name set the name of the view and return the view
+ * @method FangoView template() template($template) set the template path and return the view
+ */
+class FangoView extends FangoBase {
 	/**
 	 * The name of the view, used by render as imput/select etc
 	 * @var string
@@ -276,39 +338,27 @@ class FangoView {
 	protected $_name;
 
 	/**
-	 * The value for the view, used by render as input/select etc
-	 * @var string
-	 */
-	protected $_value;
-
-	/**
-	 * The options array, used by render as select
-	 * @var array
-	 */
-	protected $_options = array();
-
-	/**
-	 * The template to render
 	 * @var string
 	 */
 	protected $_template;
 
 	/**
-	 * @var FangoEvent 
+	 * @var FangoEvent
 	 */
-	static $onLoad;
+	static $onNew;
 
-	
 	/**
 	 * @param string $name of the view
 	 * @param string $template to render
 	 */
-	function __construct($name = null,$template=null){
+	function __construct($name = null,$template=null) {
 		if ($name) $this->_name = $name;
 		if (!$template && $name) {
 			$this->_template = "templates/$name.phtml";
+		} elseif ($template) {
+			$this->_template = $template;
 		}
-		self::$onLoad->fire($this);
+		self::$onNew->fire($this);
 	}
 
 	/**
@@ -316,52 +366,8 @@ class FangoView {
 	 * @param string $version of jquery
 	 * @return string
 	 */
-	function includeJQuery($version = "1.4.1") {
+	static function includeJQuery($version = "1.4.1") {
 		return "<script src=\"http://ajax.googleapis.com/ajax/libs/jquery/{$version}/jquery.min.js\" type=\"text/javascript\"></script>";
-	}
-
-	/**
-	 * Render the view as imput
-	 * @param string $properties the html properties
-	 * @return string the html input
-	 */
-	function input($properties=''){
-		$value = htmlspecialchars($this->_value);
-		return "<input name=\"$this->_name\" value=\"$value\" $properties />";
-	}
-	
-	/**
-	 * Render the view as select
-	 * @param string $properties the html properties
-	 * @return string the html select
-	 */
-	function select($properties=''){
-
-		if ($this->_options == array_values($this->_options)) { //This is a standard array and not a map
-			$this->_options = array_combine($this->_options,$this->_options); // Tranform a standard array in map value=>value
-		} 
-		$sreturn = "<select name=\"$this->_name\" $properties >";
-		foreach ($this->_options as $key=>$label) {
-			$key = htmlspecialchars($key);
-			if ($this->_value == $key) {
-				$selected = 'selected="selected"';
-			} else {
-				$selected = '';
-			}
-			$sreturn .= "<option $selected value=\"$key\">$label</option>";
-		}
-		$sreturn .= "</select>";
-		return $sreturn;
-	}
-	
-	/**
-	 * Render the view as textarea
-	 * @param string $properties the html properties
-	 * @return string
-	 */
-	function textarea($properties=''){
-		$value = htmlspecialchars($this->_value);
-		return "<textarea name=\"$this->_name\" $properties >$value</textarea>";
 	}
 
 	/**
@@ -369,51 +375,11 @@ class FangoView {
 	 * @param string $template
 	 * @return string
 	 */
-	function render($template=null){
+	function render($template=null) {
 		ob_start();
 		if ($template) $this->_template = $template;
 		include $this->_template;
 		return ob_get_clean();
-	}
-
-	/**
-	 * @param string $value
-	 * @return string 
-	 */
-	function value($value=null) {
-		return $this->prop('value',$value);
-	}
-
-	/**
-	 * @param string $template
-	 * @return string
-	 */
-	function template($template=null) {
-		return $this->prop('template',$template);
-	}
-
-	/**
-	 * @param array $options
-	 * @return array
-	 */
-	function options($options=array()) {
-		return $this->prop('options',$options);
-	}
-
-	/**
-	 * @param string $name
-	 * @return string 
-	 */
-	function name($name=null) {
-		return $this->prop('name',$name);
-	}
-
-	protected function prop($name,$value=null) {
-		$prop = "_$name";
-		if ($value!==null) {
-			$this->$prop = $value;
-		}
-		return $this->$prop;
 	}
 
 	/**
@@ -425,10 +391,10 @@ class FangoView {
 	}
 
 	/**
-	 * Yield over all subview
+	 * Loop over all subview
 	 * @return FangoView
 	 */
-	function yield() {
+	function yield($type='FangoView') {
 		static $i = -1;
 		$vars = array_keys(get_object_vars($this));
 
@@ -436,7 +402,7 @@ class FangoView {
 		while (++$i < $n) {
 			$var = $vars[$i];
 			$obj = $this->$var;
-			if ($obj instanceof FangoView) {
+			if ($obj instanceof $type) {
 				return $obj;
 			}
 		}
@@ -450,34 +416,185 @@ class FangoView {
 	 */
 	function getValues() {
 		$ret = array();
-		while ($view = $this->yield()) {
-			$name = $view->name();
-			if ($name) $ret[$name] = $view->value();
+		foreach ($this as $obj) {
+			if ($obj instanceof FangoInput) {
+				$name = $obj->getName();
+				if ($name) $ret[$name] = $obj->getValue();
+			}
 		}
 		return $ret;
 	}
-	
+
+	/**
+	 * A method getSomething will return the value of the protected var _something
+	 * A method something will set the value of the protected var _something and return
+	 * the object without breaking the chain
+	 */
+	function __call($name,$arguments) {
+		if (strpos('get', $name) === 0 && strlen($name)>3) {
+			$property = '_' . substr($name, 4);
+			if (property_exists($this, $property)) {
+				return $this->$property;
+			}
+		} elseif (property_exists($this, $name) && count($arguments)) {
+			$this->$name = $arguments[0];
+			return $this;
+		}
+		throw new Exception ("Method $name not found on class " . get_class($this));
+	}
+
+}
+
+/**
+ * @method FangoInput name() name (string $name)
+ * @method FangoInput options() options(array $options)
+ * @method FangoInput value() value(string $value)
+ * @method string getName()
+ * @method string getValue getValue()
+ * @method array getOptions()
+ */
+class FangoInput extends FangoBase {
+	/**
+	 * The name of the input
+	 * @var string
+	 */
+	protected $name;
+
+	/**
+	 * The value of the input
+	 * @var string
+	 */
+	protected $value;
+
+	/**
+	 * The options array, used by render as select
+	 * @var array
+	 */
+	protected $options = array();
+
+	/**
+	 * @var FangoEvent
+	 */
+	static $onNew;
+
+	/**
+	 * @param string $name
+	 * @param string $value
+	 */
+	function __construct($name,$value=null) {
+		if ($name) $this->name = $name;
+		if ($value) $this->value = $value;
+		self::$onNew->fire($this);
+	}
+
+	function getProperties($properties='') {
+		$ret = '';
+		$class_vars = get_class_vars(get_class($this));
+		foreach ($this as $key=>$value) {
+			if (!array_key_exists($key,$class_vars)) {  //I want just dinamyc properties
+				$value = addslashes($value);
+				$ret .= "$key=\"$value\" ";
+			}
+		}
+		return $ret . $properties;
+	}
+
+	/**
+	 * Render the view as imput
+	 * @param string $properties the html properties
+	 * @return string the html input
+	 */
+	function input($properties='') {
+		$value = htmlspecialchars($this->value);
+		$properties = $this->getProperties($properties);
+		return "<input name=\"$this->name\" $properties value=\"$value\" />";
+	}
+
+	/**
+	 * Render the view as select
+	 * @param string $properties the html properties
+	 * @return string the html select
+	 */
+	function select($properties='') {
+		$properties = $this->getProperties($properties);
+		if ($this->_options == array_values($this->options)) { //This is a standard array and not a map
+			$this->_options = array_combine($this->options,$this-_options); // Tranform a standard array in map value=>value
+		}
+		$sreturn = "<select name=\"$this->name\" $properties >";
+		foreach ($this->options as $key=>$label) {
+			$key = htmlspecialchars($key);
+			if ($this->value == $key) {
+				$selected = 'selected="selected"';
+			} else {
+				$selected = '';
+			}
+			$sreturn .= "<option $selected value=\"$key\">$label</option>";
+		}
+		$sreturn .= "</select>";
+		return $sreturn;
+	}
+
+	/**
+	 * Render the input as textarea
+	 * @param string $properties the html properties
+	 * @return string
+	 */
+	function textarea($properties='') {
+		$value = htmlspecialchars($this->value);
+		$properties = $this->getProperties($properties);
+		return "<textarea name=\"$this->name\" $properties >$value</textarea>";
+	}
+
+	/**
+	 * A method getSomething will return the value of the var something
+	 * A method something will set the value of the var something and return
+	 * the object without breaking the chain
+	 */
+	function __call($name,$arguments) {
+		if (strpos($name,'get') === 0 && strlen($name)>3) {
+			$property = strtolower(substr($name, 3));
+			if (isset($this->$property)) return $this->$property;
+		} else {
+			if (!count($arguments)) $arguments[0] = $name; //If no value passed to the method
+			$this->$name = $arguments[0];
+			return $this;
+		}
+	}
+
 }
 
 class FangoDB extends PDO {
 
 	/**
-	 * @var FangoEvent 
+	 * @var FangoEvent
 	 */
-	static $onLoad;
+	static $onNew;
+
+	/**
+	 * @var FangoDB
+	 */
+	static $db;
 
 	/**
 	 * @see PDO::__construct
 	 */
-	function __construct($dsn, $username=null, $password=null,$driver_options=array()) {
-		parent::__construct($dsn,$username,$password,$driver_options);
-		self::$onLoad->fire();
+	static function connect($dsn, $username=null, $password=null,$driver_options=array()) {
+		self::$db = new FangoDB($dsn,$username,$password,$driver_options);
 	}
-	
+
+	/**
+	 * @see PDO::__construct
+	 */
+	function __construct($dsn,$username=null,$password=null,$driver_options=array()) {
+		parent::__construct($dsn,$username,$password,$driver_options);
+		self::$onNew->fire($this);
+	}
+
 	/**
 	 * Instance a table model an inject it with the database
 	 * @param string $table name
 	 * @param string $pk name
+	 * @param string $class the model class instance
 	 * @return FangoModel
 	 */
 	function model($table,$pk = null) {
@@ -489,7 +606,7 @@ class FangoDB extends PDO {
 	 * @param array $params
 	 * @return PDOStatement
 	 */
-	function execute($sql,$params = null){
+	function execute($sql,$params = null) {
 		$sth = $this->prepare($sql);
 		$sth->execute($params);
 		return $sth;
@@ -498,9 +615,9 @@ class FangoDB extends PDO {
 	/**
 	 * @param string $sql
 	 * @param array $params
-	 * @return array 
+	 * @return array
 	 */
-	function getAll($sql,$params = null){
+	function getAll($sql,$params = null) {
 		$sth = $this->execute($sql,$params);
 		return $sth->fetchAll(PDO::FETCH_ASSOC);
 	}
@@ -508,9 +625,9 @@ class FangoDB extends PDO {
 	/**
 	 * @param string $sql
 	 * @param array $params
-	 * @return array 
+	 * @return array
 	 */
-	function getRow($sql,$params = null){
+	function getRow($sql,$params = null) {
 		$sth = $this->execute($sql,$params);
 		return $sth->fetch(PDO::FETCH_ASSOC);
 	}
@@ -520,7 +637,7 @@ class FangoDB extends PDO {
 	 * @param array $params
 	 * @return array
 	 */
-	function getCol($sql,$params = null){
+	function getCol($sql,$params = null) {
 		$sth = $this->execute($sql,$params);
 		return $sth->fetchAll(PDO::FETCH_COLUMN);
 	}
@@ -537,7 +654,7 @@ class FangoDB extends PDO {
 	}
 }
 
-class FangoModel {
+class FangoModel extends FangoBase {
 	/**
 	 *
 	 * @var FangoDB
@@ -575,14 +692,14 @@ class FangoModel {
 	protected $limit = array();
 
 	/**
-	 * @var FangoEvent 
+	 * @var FangoEvent
 	 */
-	static $onLoad;
+	static $onNew;
 
 	/**
 	 * @var array
 	 */
-	public $events = array('beforeUpdate','beforeInsert','beforeDelete','afterUpdate','afterInsert','afterDelete');
+	public $events = array('beforeUpdate','beforeInsert','afterUpdate','afterInsert','beforeDelete','afterDelete');
 
 	/**
 	 * @param string $name
@@ -592,15 +709,26 @@ class FangoModel {
 	function __construct($name,$pk=null,$db=null) {
 		$this->name = $name;
 		$this->pk = $pk;
-		$this->db = $db;
-		
-		self::$onLoad->fire($this);
+		$this->setDB($db);
+
+		self::$onNew->fire($this);
+	}
+
+	/**
+	 * @param FangoDB $db
+	 */
+	function setDB($db=null) {
+		if (is_object($db)) {
+			$this->db = $db;
+		} elseif (is_object(FangoDB::$db)) {
+			$this->db = FangoDB::$db;
+		}
 	}
 
 	/**
 	 * Set the fields to extract
 	 * @param array $fields
-	 * @return FangoModel 
+	 * @return FangoModel
 	 */
 	function fields($fields) {
 		if (!is_array($fields)) $fields = func_get_args();
@@ -610,7 +738,7 @@ class FangoModel {
 	}
 
 	/**
-	 * Add a where clause in the PDO format 
+	 * Add a where clause in the PDO format
 	 * @param string $clause
 	 * @param array $params
 	 * @return FangoModel
@@ -625,7 +753,7 @@ class FangoModel {
 		} else {
 			$this->where['params'] = $params;
 		}
-		
+
 		return $this;
 	}
 
@@ -644,7 +772,7 @@ class FangoModel {
 	 * Set limit and offset
 	 * @param int $limit
 	 * @param int $offset
-	 * @return FangoModel 
+	 * @return FangoModel
 	 */
 	function limit($limit,$offset = null) {
 		$this->limit = array($limit,$offset);
@@ -673,7 +801,7 @@ class FangoModel {
 		if ($this->fields) $fields = join(',',$this->fields);
 
 		if ($this->where) $where = 'WHERE ' . join (' AND ',$this->where['clause']);
-		
+
 		if ($this->order) {
 			$order = "ORDER BY ";
 			foreach ($this->order as $ao) {
@@ -681,7 +809,7 @@ class FangoModel {
 			}
 			$order = substr($order,0,-1);
 		}
-		
+
 		if ($this->limit) {
 			$limit = "LIMIT " . $this->limit[0];
 			if ($this->limit[1]) {
@@ -736,9 +864,9 @@ class FangoModel {
 	 */
 	function insert($row) {
 		$e = $this->beforeInsert->fire($this,$row); //BeforeInsert event fired
-		list (,$row) = $e->params;
+		list($row) = $e->params;
 		if ($e->preventDefault()) return;
-		
+
 		$keys = array_keys($row);
 
 		$fields = join(',',$keys);
@@ -755,9 +883,9 @@ class FangoModel {
 	 * @param string $seqname
 	 * @return int
 	 */
-	 function lastInsertID($seqname = null) {
-		 return $this->db->lastInsertId($seqname);
-	 }
+	function lastInsertID($seqname = null) {
+		return $this->db->lastInsertId($seqname);
+	}
 
 	/**
 	 * Delete the row specified by the pk param in the related table
@@ -766,9 +894,9 @@ class FangoModel {
 	 */
 	function delete($pk) {
 		$e = $this->beforeDelete->fire($this,$pk);
-		list (,$pk) = $e->params;
+		list($pk) = $e->params;
 		if ($e->preventDefault()) return;
-		
+
 		$this->requirePK();
 		list($where,$params) = $this->pkParts(null,$pk);
 		$sql = "DELETE FROM {$this->name} WHERE $where";
@@ -786,7 +914,7 @@ class FangoModel {
 	 */
 	function update($row,$pk=null) {
 		$e = $this->beforeUpdate->fire($this,$row,$pk); //BeforeUpdate event fired
-		list (,$row,$pk) = $e->params;
+		list($row,$pk) = $e->params;
 		if ($e->preventDefault()) return;
 
 		$this->requirePK();
@@ -802,12 +930,12 @@ class FangoModel {
 		$this->afterUpdate->fire($this,$row,$pk,$return); //AfterUpdate event fired
 		return $return;
 	}
-	
+
 	/**
 	 * The arg row is new?
 	 * @param array $row to consider
 	 * @param mixed $pk
-	 * @return <type> 
+	 * @return boolean
 	 */
 	function isNew($row,$pk=null) {
 		list($pk_where,$pk_values) = $this->pkParts($row,$pk);
@@ -821,7 +949,7 @@ class FangoModel {
 	 * @return FangoModel
 	 */
 	function reset($what = null) {
-		if (in_array($what,array('fields','where','limit','order'))){
+		if (in_array($what,array('fields','where','limit','order'))) {
 			$this->$what = array();
 		} else {
 			$this->fields = array();
@@ -833,7 +961,7 @@ class FangoModel {
 	}
 
 	/**
-	 * Return an array with pk where and params ready to be used to compose a query 
+	 * Return an array with pk where and params ready to be used to compose a query
 	 * @param string $row
 	 * @param mixed $pk_value
 	 * @return array
@@ -877,20 +1005,24 @@ class FangoModel {
 		return $this->asSelect();
 	}
 
-	/**
-	 * Used to lazy loading events
-	 */
-	function __get($name) {
-		FangoEvent::lazyLoading($this,$name);
-		return $this->$name;
-	}
 }
 
-class FangoEvent {
+class FangoEvent extends FangoBase {
 	/**
-	 * @var array the params passed to the obsvers
+	 * @var array the params passed to the obsers
 	 */
 	public $params;
+
+	/**
+	 * The objects that has generated the event
+	 * @var object 
+	 */
+	public $target;
+
+	/**
+	 * @var string event name
+	 */
+	public $name;
 
 	/**
 	 * @var array list of observer for the events
@@ -901,24 +1033,12 @@ class FangoEvent {
 	 * @var boolean
 	 */
 	protected $prevent = false;
-	/**
-	 * @var string event name
-	 */
-	protected $name;
 
 	/**
 	 * @param string $name the event name
 	 */
 	function __construct($name) {
 		$this->name = $name;
-	}
-
-	/**
-	 * Getter for protected properties, the name can be read but not changed
-	 * @param string $name
-	 */
-	function __get($name) {
-		if (isset($this->$name)) return $this->$name;
 	}
 
 	/**
@@ -931,27 +1051,36 @@ class FangoEvent {
 	}
 
 	/**
-	 * @param FangoObserver $observer 
+	 * @param FangoObserver $observer
 	 */
-	function addObserver($observer) {
-		if (!in_array($observer,$this->observers)) $this->observers[] = $observer;
+	function addObserver($observer,$handler=null) {
+		if ($handler === null) $handler = $this->name;
+		if (!in_array($observer,$this->observers)) $this->observers[] = array($observer,$handler);
 	}
-	
+
 	/**
 	 * @param FangoObserver $observer
 	 */
 	function deleteObserver($observer) {
-		$key = array_search($observer,$this->observers);
-		if ($key !== false) unset($this->observers[$key]);
+		foreach ($this->observers as $key=>$stored_observer) {
+			if ($stored_obverser==$observer) {
+				unset($this->observers[$key]);
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
 	 * Fire the event
 	 */
-	function fire() {
+	function fire($target) {
+		$this->target = $target;
 		$this->params = func_get_args();
-		foreach ($this->observers as $observer) {
-			$method = $this->name;
+		array_shift($this->params); //the param 0 is always the target
+		
+		foreach ($this->observers as $a) {
+			list($observer,$method) = $a;
 			if (method_exists($observer,$method)) {
 				$observer->$method($this);
 			}
@@ -963,7 +1092,7 @@ class FangoEvent {
 	 * @param Object $subject
 	 */
 	static function lazyLoading($subject,$event) {
-		if (isset($subject->events) && is_array($subject->events)) {
+		if (isset($subject->events) && is_array($subject->events) && in_array($event,$subject->events)) {
 			$subject->$event = new FangoEvent($event);
 			return $subject->$event;
 		}
@@ -971,51 +1100,10 @@ class FangoEvent {
 	}
 }
 
-class FangoObserver {
-
-	function subscribe($event) {
-		$event->addObserver($this);
-		return $this;
-	}
-
-	function unsubscribe($event) {
-		$event->deleteObserver($this);
-		return $this;
-	}
-}
-
-class FangoPlugin  extends FangoObserver {
-
-	static $loaded = array();
-	
-	function  __construct() {
-		if (isset($this->pluginto)) $this->pluginto($this->pluginto);
-	}
-
-	function pluginto($class) {
-		$pro = get_class_vars($class);
-		if (isset($pro['onLoad']) && $pro['onLoad'] instanceof FangoEvent) {
-			$this->subscribe($pro['onLoad']);
-		}
-	}
-
-	function onLoad($e) {
-		if (is_callable(array($this, 'plug'))) $this->plug($e->params[0]);
-	}
-
-	static function load($name) {
-		if (!isset(self::$loaded[$name])) {
-			$class = "{$name}Plugin";
-			self::$loaded[$name] = new $class;
-		}
-		return self::$loaded[$name];
-	}
-
-}
-
-//onLoad events set to class level
-Fango::$onLoad = new FangoEvent('onLoad');
-FangoDB::$onLoad = new FangoEvent('onLoad');
-FangoModel::$onLoad = new FangoEvent('onLoad');
-FangoView::$onLoad = new FangoEvent('onLoad');
-FangoController::$onLoad = new FangoEvent('onLoad');
+//onNew events set to class level
+Fango::$onNew = new FangoEvent('onNew');
+FangoDB::$onNew = new FangoEvent('onNew');
+FangoModel::$onNew = new FangoEvent('onNew');
+FangoView::$onNew = new FangoEvent('onNew');
+FangoInput::$onNew = new FangoEvent('onNew');
+FangoController::$onNew = new FangoEvent('onNew');
