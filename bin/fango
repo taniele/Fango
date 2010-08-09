@@ -144,7 +144,7 @@ class Boots {
 				Boots::copy(__DIRNAME__ . '/../fango', $appPath . "/fango");
 				
 				// put default plugins
-				Boots::copy(__DIRNAME__ . '/../fango', $appPath . "/application/plugins");
+				Boots::copy(__DIRNAME__ . '/../plugins', $appPath . "/application/plugins");
 				
 				// put configuration
 				Boots::copy(__DIRNAME__ . '/templates/configuration.json', $appPath . "/conf/default");
