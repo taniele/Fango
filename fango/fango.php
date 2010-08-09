@@ -425,10 +425,10 @@ class FangoView {
 	}
 
 	/**
-	 * Yeld over all subview
+	 * Yield over all subview
 	 * @return FangoView
 	 */
-	function yeld() {
+	function yield() {
 		static $i = -1;
 		$vars = array_keys(get_object_vars($this));
 
@@ -450,7 +450,7 @@ class FangoView {
 	 */
 	function getValues() {
 		$ret = array();
-		while ($view = $this->yeld()) {
+		while ($view = $this->yield()) {
 			$name = $view->name();
 			if ($name) $ret[$name] = $view->value();
 		}
