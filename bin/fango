@@ -22,6 +22,24 @@ class Boots {
 		echo $what . PHP_EOL;
 	}
 	
+	static private function appName() {
+		$a = Boots::findPath();
+		$a = explode('/', $a);
+		$c = count($a);
+		return $a[$c-1];
+	}
+	
+	static private function createConfiguration($hostname, $environment, $appPath) {
+		
+		if(file_exists($appPath . "/conf/" . $hostname)) {
+			return Boots::println("This configuration already exists.");
+		}
+		
+		$conf = file_get_contents(__DIRNAME__ . "/templates/configuration.json");
+		$conf = str_replace(array("{{NAME}}", "{{TYPE}}"), array(Boots::appName(), $environment), $conf);
+		file_put_contents($appPath . "/conf/" . $hostname, $conf);
+	}
+	
 	static private function createController($controllers, $appPath) {
 
 		foreach($controllers as $name) {
@@ -139,6 +157,9 @@ class Boots {
 				
 				// put default view
 				Boots::createView(array('default'), $appPath);
+
+				// put default configuration
+				Boots::createConfiguration('default', 'development', $appPath);
 				
 				// put fango
 				Boots::copy(__DIRNAME__ . '/../fango', $appPath . "/fango");
@@ -183,8 +204,26 @@ class Boots {
 			
 				Boots::createView(array_slice($_SERVER["argv"], 3), $appPath);
 			break;
+			case 'conf':
+			case 'configuration':
+				$appPath = Boots::findPath();
+				if(!isset($_SERVER["argv"][4])) {
+					return Boots::println("Retry specifying a host name and an environment type.");
+				}
+				
+				switch($_SERVER["argv"][4]) {
+					case 'development':
+					case 'staging':
+					case 'live':
+						return Boots::createConfiguration($_SERVER["argv"][3], $_SERVER["argv"][4], $appPath);
+						break;
+					default:
+						return Boots::println("This is not a valid environment type.");
+				}
+
+			break;
 			default:
-				Boots::println("No. You have to specify either 'app' or 'application', 'controller(s)', 'view(s)'.");
+				Boots::println("No. You have to specify either 'app' or 'application', 'controller(s)', 'view(s)', 'configuration'.");
 			break;
 		}
 	}

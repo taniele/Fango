@@ -16,6 +16,5 @@ require_once '../fango/fango.php';
 require_once 'plugins/com.studiomelonpie.quickon.php';
 
 $fango = new Fango();
-$fango->run();
 $quickon = QuickonPlugin::init()->getConfig();
 $fango->run($quickon['rules']);
