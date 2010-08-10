@@ -55,7 +55,7 @@ class Fango extends FangoBase {
 	/**
 	 * @var string the default controller if no controller specified
 	 */
-	public $default_controller = 'default';
+	public $default_controller = 'Default';
 
 	/**
 	 * @var the default action if action not specified
@@ -193,6 +193,7 @@ class Fango extends FangoBase {
 	 * @param array $params
 	 */
 	function dispatch($controller=null,$action=null,array $params=null) {
+
 		if ($controller)$this->controller = $controller;
 		if ($action) $this->action = $action;
 		if ($params!==null) $this->params = $params;
@@ -200,7 +201,7 @@ class Fango extends FangoBase {
 		$e = $this->beforeDispatch->fire($this); //BeforeDispatch Event Fired
 		if ($e->preventDefault()) return;
 
-		$class_name = "{$this->controller}Controller";
+		$class_name = ucfirst("{$this->controller}Controller");
 		$method_name = "{$this->action}Action";
 
 		//If the method doesn't exist use the default controller and method

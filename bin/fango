@@ -36,7 +36,7 @@ class Boots {
 		}
 		
 		$conf = file_get_contents(__DIRNAME__ . "/templates/configuration.json");
-		$conf = str_replace(array("{{NAME}}", "{{TYPE}}"), array(Boots::appName(), $environment), $conf);
+		$conf = str_replace("{{ENVIRONMENT}}", $environment, $conf);
 		file_put_contents($appPath . "/conf/" . $hostname, $conf);
 	}
 	

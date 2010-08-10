@@ -1,10 +1,12 @@
 {
-	"environment": "development",
+	"label": "",
+	"environment": "{{ENVIRONMENT}}",
+	"deployPath": "",
 	"database": {
-		"driver": "mysql",
-		"name": "porque",
-		"host": "127.0.0.1",
-		"user": "root",
+		"driver": "",
+		"name": "",
+		"host": "",
+		"user": "",
 		"pass": ""
 	}
 }

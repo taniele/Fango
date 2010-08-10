@@ -7,7 +7,7 @@ function __autoload($class) {
 
 	if(strpos($class, "Controller") !== false) {
 
-		include 'controllers/' . strtolower(str_replace("Controller", "", $class) . '.php');
+		include 'controllers/' . str_replace("Controller", "", $class) . '.php';
 	}
 }
 
