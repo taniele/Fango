@@ -69,17 +69,21 @@ class Boots {
 	}
 
 	static function help() {
+		$file = basename(__FILE__);
 		Boots::println("It's easy.");
-		Boots::println("create app|application <name>");
+		Boots::println($file . " create app|application <name>");
 		Boots::println("\tCreates (scaffolds) an application with the specified name.");
 		Boots::println();
-		Boots::println("create controller|controllers <name> [name, name, ...]");
+		Boots::println($file . " create controller|controllers <name> [name, name, ...]");
 		Boots::println("\tCreates one or more controllers.");
 		Boots::println();
-		Boots::println("create view|views <name> [name, name, ...]");
+		Boots::println($file . " create view|views <name> [name, name, ...]");
 		Boots::println("\tCreates one or more views.");
 		Boots::println();
-		Boots::println("help");
+		Boots::println($file . " create conf|configuration <hostname> <development|staging|live>");
+		Boots::println("\tCreates a configuration, if not exists, for the specified hostname and environment.");
+		Boots::println();
+		Boots::println($file . " help");
 		Boots::println("\tShows this text.");
 	}
 	
